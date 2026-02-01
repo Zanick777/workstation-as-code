@@ -1,0 +1,6 @@
+---
+- name: Security and Customization Workflow
+  hosts: all
+  gather_facts: false
+  become: true
+  become_method: sudo
