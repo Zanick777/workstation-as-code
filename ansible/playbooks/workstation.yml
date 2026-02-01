@@ -1,6 +1,10 @@
 ---
 - name: Security and Customization Workflow
-  hosts: all
+  hosts: localhost
   gather_facts: false
   become: true
   become_method: sudo
+  tasks:
+    - name: Include Security Role
+      ansible.builtin.include_role:
+        name: ../roles/security-baseline

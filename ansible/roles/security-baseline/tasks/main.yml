@@ -1,0 +1,16 @@
+#SPDX-License-Identifier: MIT-0
+---
+- name: Install Scanner and Security guide
+  ansible.builtin.dnf:
+    name:
+      - openscap-scanner
+      - scap-security-guide
+    state: present
+
+- name: list all installed security guides
+  ansible.builtin.command: oscap info /usr/share/xml/scap/ssg/content/ssg-fedora-ds.xml
+  register: security_guides
+
+- name: Print security guides
+  ansible.builtin.debug:
+    var: security_guides.stdout_lines
