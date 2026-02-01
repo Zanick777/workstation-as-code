@@ -1,0 +1,19 @@
+---
+- name: Verify crypto hashes of sys files to rpms
+  ansible.builtin.shell: rpm -Va --noconfig | grep '^..5' | awk '{print $4}'
+  register: rpm_hash_check
+  failed_when: rpm_hash_check.rc not in [0,1]
+  changed_when: false
+
+- name: Debug any files outside of sys valid files
+  ansible.builtin.debug:
+    msg: "File {{ item }} has invalid hash compared to rpm database"
+  loop: "{{ rpm_hash_check.stdout_lines }}"
+  when: rpm_hash_check.stdout_lines is defined and rpm_hash_check.stdout_lines | length > 0
+
+- name: Reinstall rpms with invalid sys file hashes
+  ansible.builtin.yum:
+    name: "{{ item }}"
+    state: reinstalled
+  loop: "{{ rpm_hash_check.stdout_lines | map('regex_replace', '^/usr/', '') | map('regex_replace', '/.*$', '') | list | unique }}"
+  when: rpm_hash_check.stdout_lines is defined and rpm_hash_check.stdout_lines | length > 0
