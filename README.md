@@ -81,6 +81,7 @@ Everything is **modular and opt-in**.
 - git
 - ansible-core
 - sudo privileges
+```bash sudo dnf install -y git ansible-core```
+
 ```
 
-Hello
