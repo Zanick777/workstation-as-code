@@ -82,14 +82,6 @@ Everything is **modular and opt-in**.
 - ansible-core
 - sudo privileges
 
-```
+```code
 sudo dnf install -y git ansible-core
 ```
-
-## Clone the Repository
-```
-git clone https://github.com/Zanick777/workstation-as-code.git
-cd workstation-as-code
-```
-
-
