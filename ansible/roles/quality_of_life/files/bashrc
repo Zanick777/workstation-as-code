@@ -103,3 +103,5 @@ if [ -d "$HOME/.bash_functions" ]; then
     done
     unset func_file
 fi
+
+PS1='[\[\e[92m\]\u\[\e[38;5;27m\]@\[\e[92m\]\h\[\e[0m\]]:\W \T \\$ '
