@@ -1,0 +1,26 @@
+---
+- name: Check to see if crypto-policies/back-ends file exists
+  ansible.builtin.stat:
+    path: /etc/crypto-policies/config
+  register: crypto_policies_back_ends
+
+- name: Check to see if crypto policies are set to default
+  ansible.builtin.lineinfile:
+    path: /etc/crypto-policies/config
+    line: "DEFAULT"
+    state: present
+  check_mode: true
+  register: default_crypto_policy
+  when: crypto_policies_back_ends.stat.exists|bool
+
+- name: Create Crypto policies backends file
+  ansible.builtin.copy:
+    src: ../../files/crypto-policies-config
+    dest: /etc/crypto-policies/config
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - not crypto_policies_back_ends.stat.exists | bool
+      or  default_crypto_policy.changed|bool 
+    

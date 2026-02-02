@@ -1,6 +1,6 @@
 #SPDX-License-Identifier: MIT-0
 ---
-- name: Install Scanner and Security guide
+- name: Install Scap Scanner and Security guide
   ansible.builtin.dnf:
     name:
       - openscap-scanner
@@ -8,6 +8,11 @@
     state: present
 
 - name: Include rpm hash validity check
-  ansible.builtin.include_tasks: rpm_hash_validity.yml
-
-- 
+  ansible.builtin.include_tasks: "high/{{ check_name }}"
+  loop:
+    - rpm_hash_validity.yml
+    - configure_crypto_policy.yml
+    - krb5_crypto_policy_link.yml
+  loop_control:
+    loop_var: "check_name"
+... 
