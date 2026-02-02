@@ -8,3 +8,11 @@
     - name: Include Security Role
       ansible.builtin.include_role:
         name: ../roles/security-baseline
+      tags:
+        - SEC
+
+    - name: Include Quality of Life
+      ansible.builtin.include_role:
+        name: ../roles/quality_of_life
+      tags:
+        - QOF

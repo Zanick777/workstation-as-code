@@ -1,0 +1,23 @@
+---
+# Quality of Life - Configuration files and settings
+
+- name: Deploy .bashrc
+  ansible.builtin.copy:
+    src: bashrc
+    dest: "/home/zanick/.bashrc"
+    owner: "zanick"
+    mode: '0644'
+
+- name: Create .bash_functions directory
+  ansible.builtin.file:
+    path: "/home/zanick/.bash_functions"
+    state: directory
+    owner: "zanick"
+    mode: '0755'
+
+- name: Deploy bash function files
+  ansible.builtin.copy:
+    src: "bash_functions/"
+    dest: "/home/zanick/.bash_functions/"
+    owner: "zanick"
+    mode: '0644'
