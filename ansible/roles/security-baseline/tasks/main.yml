@@ -12,6 +12,7 @@
   loop:
     - rpm_hash_validity.yml
     - configure_crypto_policy.yml
+    - display_login_attempts.yml
     - krb5_crypto_policy_link.yml
   loop_control:
     loop_var: "check_name"
