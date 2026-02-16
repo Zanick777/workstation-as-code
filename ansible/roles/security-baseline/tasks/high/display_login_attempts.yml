@@ -1,13 +1,12 @@
----
 - name: Gather the package facts
-  ansible.builtin.package_facts:
+  package_facts:
     manager: auto
 
-- name: Check if system relies on auth select tool
+- name: Check if system relies on authselect tool
   ansible.builtin.stat:
     path: /usr/bin/authselect
   register: result_authselect_present
-  when: '"pam" in ansible_facts.packages'
+  when: "'pam' in ansible_facts.packages"
 
 - name: Collect the Available authselect Features
   ansible.builtin.command:
@@ -16,14 +15,77 @@
   changed_when: false
   check_mode: false
   when:
-    - '"pam" in ansible_facts.packages'
-    - result_authselect_present.stat.exists
+  - "'pam' in ansible_facts.packages"
+  - result_authselect_present.stat.exists
 
 - name: Configure pam_lastlog.so Using authselect Feature
-  when:
-    - result_auithselect_present.stat.exists
-    - result_authselect_available_features.stdout is search("with-silent-lastlog")
   block:
+  - name: Check integrity of authselect current profile
+    ansible.builtin.command:
+      cmd: authselect check
+    register: result_authselect_check_cmd
+    changed_when: false
+    check_mode: false
+    failed_when: false
+
+  - name: Informative message based on the authselect integrity check result
+    ansible.builtin.assert:
+      that:
+      - ansible_check_mode or result_authselect_check_cmd.rc == 0
+      fail_msg:
+      - authselect integrity check failed. Remediation aborted!
+      - This remediation could not be applied because an authselect profile was not
+        selected or the selected profile is not intact.
+      - It is not recommended to manually edit the PAM files when authselect tool
+        is available.
+      - In cases where the default authselect profile does not cover a specific demand,
+        a custom authselect profile is recommended.
+      success_msg:
+      - authselect integrity check passed
+
+  - name: Get authselect Features Currently Enabled
+    ansible.builtin.shell:
+      cmd: authselect current | tail -n+3 | awk '{ print $2 }'
+    register: result_authselect_features
+    changed_when: false
+    check_mode: false
+    when:
+    - result_authselect_check_cmd is success
+
+  - name: Ensure "with-silent-lastlog" Feature is Disabled Using authselect Tool
+    ansible.builtin.command:
+      cmd: authselect disable-feature with-silent-lastlog
+    register: result_authselect_disable_feature_cmd
+    when:
+    - result_authselect_check_cmd is success
+    - result_authselect_features.stdout is search("with-silent-lastlog")
+
+  - name: Ensure authselect changes are applied
+    ansible.builtin.command:
+      cmd: authselect apply-changes -b
+    when:
+    - result_authselect_disable_feature_cmd is not skipped
+    - result_authselect_disable_feature_cmd is success
+  when:
+  - "'pam' in ansible_facts.packages"
+  - result_authselect_present.stat.exists
+  - result_authselect_available_features.stdout is search("with-silent-lastlog")
+
+- name: Configure pam_lastlog.so in appropriate PAM files
+  block:
+
+  - name: Define the PAM file to be edited as a local fact
+    ansible.builtin.set_fact:
+      pam_file_path: /etc/pam.d/postlogin
+
+  - name: Check if system relies on authselect tool
+    ansible.builtin.stat:
+      path: /usr/bin/authselect
+    register: result_authselect_present
+
+  - name: Ensure authselect custom profile is used if authselect is present
+    block:
+
     - name: Check integrity of authselect current profile
       ansible.builtin.command:
         cmd: authselect check
@@ -35,73 +97,221 @@
     - name: Informative message based on the authselect integrity check result
       ansible.builtin.assert:
         that:
-          - ansible_check_mode or result_authselect_check_cmd.rc == 0
+        - ansible_check_mode or result_authselect_check_cmd.rc == 0
         fail_msg:
-          - authselect integrity check failed. Remediation aborted!
-          - This remediation could not be applied because an authselect profile was not selected or the selected profile is not intact
-          - It is not recommended to manually edit the PAM files when authselect tool is available
-          - In cases where the default authselect profile does not cover a specific demand, a custom authselect profile is recommended.
+        - authselect integrity check failed. Remediation aborted!
+        - This remediation could not be applied because an authselect profile was
+          not selected or the selected profile is not intact.
+        - It is not recommended to manually edit the PAM files when authselect tool
+          is available.
+        - In cases where the default authselect profile does not cover a specific
+          demand, a custom authselect profile is recommended.
         success_msg:
-          - authselect integrity check passed
+        - authselect integrity check passed
 
-    - name: Get authselect Features Currently Enabled
+    - name: Get authselect current profile
+      ansible.builtin.shell:
+        cmd: authselect current -r | awk '{ print $1 }'
+      register: result_authselect_profile
+      changed_when: false
+      when:
+      - result_authselect_check_cmd is success
+
+    - name: Define the current authselect profile as a local fact
+      ansible.builtin.set_fact:
+        authselect_current_profile: '{{ result_authselect_profile.stdout }}'
+        authselect_custom_profile: '{{ result_authselect_profile.stdout }}'
+      when:
+      - result_authselect_profile is not skipped
+      - result_authselect_profile.stdout is match("custom/")
+
+    - name: Define the new authselect custom profile as a local fact
+      ansible.builtin.set_fact:
+        authselect_current_profile: '{{ result_authselect_profile.stdout }}'
+        authselect_custom_profile: custom/hardening
+      when:
+      - result_authselect_profile is not skipped
+      - result_authselect_profile.stdout is not match("custom/")
+
+    - name: Get authselect current features to also enable them in the custom profile
       ansible.builtin.shell:
         cmd: authselect current | tail -n+3 | awk '{ print $2 }'
       register: result_authselect_features
       changed_when: false
       check_mode: false
       when:
-        - result_authselect_check_cmd is success
+      - result_authselect_profile is not skipped
+      - authselect_current_profile is not match("custom/")
 
-    - name: Ensure "with-silent-lastlog" Feature is Disabled Using authselect Tool
-      ansible.builtin.command:
-        cmd: authselect disable-feature with-silent-lastlog
-      register: result_authselect_disable_feature_cmd
+    - name: Check if any custom profile with the same name was already created
+      ansible.builtin.stat:
+        path: /etc/authselect/{{ authselect_custom_profile }}
+      register: result_authselect_custom_profile_present
+      changed_when: false
       when:
-        - result_authselect_check_cmd is success
-        - result_authselect_features.stdout is search("with-silent-lastlog")
+      - result_authselect_profile is not skipped
+      - authselect_current_profile is not match("custom/")
+
+    - name: Create an authselect custom profile based on the current profile
+      ansible.builtin.command:
+        cmd: authselect create-profile hardening -b {{ authselect_current_profile
+          }}
+      when:
+      - result_authselect_profile is not skipped
+      - result_authselect_check_cmd is success
+      - authselect_current_profile is not match("^(custom/|local)")
+      - not result_authselect_custom_profile_present.stat.exists
+
+    - name: Create an authselect custom profile based on sssd profile
+      ansible.builtin.command:
+        cmd: authselect create-profile hardening -b sssd
+      when:
+      - result_authselect_profile is not skipped
+      - result_authselect_check_cmd is success
+      - authselect_current_profile is match("local")
+      - not result_authselect_custom_profile_present.stat.exists
+
+    - name: Ensure authselect changes are applied
+      ansible.builtin.command:
+        cmd: authselect apply-changes -b --backup=before-hardening-custom-profile
+      when:
+      - result_authselect_check_cmd is success
+      - result_authselect_profile is not skipped
+      - authselect_current_profile is not match("custom/")
+      - authselect_custom_profile is not match(authselect_current_profile)
+
+    - name: Ensure the authselect custom profile is selected
+      ansible.builtin.command:
+        cmd: authselect select {{ authselect_custom_profile }}
+      register: result_pam_authselect_select_profile
+      when:
+      - result_authselect_check_cmd is success
+      - result_authselect_profile is not skipped
+      - authselect_current_profile is not match("custom/")
+      - authselect_custom_profile is not match(authselect_current_profile)
+
+    - name: Restore the authselect features in the custom profile
+      ansible.builtin.command:
+        cmd: authselect enable-feature {{ item }}
+      loop: '{{ result_authselect_features.stdout_lines }}'
+      register: result_pam_authselect_restore_features
+      when:
+      - result_authselect_profile is not skipped
+      - result_authselect_features is not skipped
+      - result_pam_authselect_select_profile is not skipped
+
+    - name: Ensure authselect changes are applied
+      ansible.builtin.command:
+        cmd: authselect apply-changes -b --backup=after-hardening-custom-profile
+      when:
+      - result_authselect_check_cmd is success
+      - result_authselect_profile is not skipped
+      - result_pam_authselect_restore_features is not skipped
+
+    - name: Change the PAM file to be edited according to the custom authselect profile
+      ansible.builtin.set_fact:
+        pam_file_path: /etc/authselect/{{ authselect_custom_profile }}/{{ pam_file_path
+          | basename }}
+      when:
+      - authselect_custom_profile is defined
+    when:
+    - result_authselect_present.stat.exists
+
+  - name: Define a fact for control already filtered in case filters are used
+    ansible.builtin.set_fact:
+      pam_module_control: '[default=1]'
+
+  - name: Check if expected PAM module line is present in {{ pam_file_path }}
+    ansible.builtin.lineinfile:
+      path: '{{ pam_file_path }}'
+      regexp: ^\s*session\s+{{ pam_module_control | regex_escape() }}\s+pam_lastlog.so\s*.*
+      state: absent
+    check_mode: true
+    changed_when: false
+    register: result_pam_line_present
+
+  - name: Include or update the PAM module line in {{ pam_file_path }}
+    block:
+    - name: Check if required PAM module line is present in {{ pam_file_path }} with different control
+      ansible.builtin.lineinfile:
+        path: '{{ pam_file_path }}'
+        regexp: ^\s*session\s+.*\s+pam_lastlog.so\s*
+        state: absent
+      check_mode: true
+      changed_when: false
+      register: result_pam_line_other_control_present
+
+    - name: Ensure the correct control for the required PAM module line in {{ pam_file_path }}
+      ansible.builtin.replace:
+        dest: '{{ pam_file_path }}'
+        regexp: ^(\s*session\s+).*(\bpam_lastlog.so.*)
+        replace: \1{{ pam_module_control }} \2
+      register: result_pam_module_edit
+      when:
+      - result_pam_line_other_control_present.found == 1
+
+    - name: Ensure the required PAM module line is included in {{ pam_file_path }}
+      ansible.builtin.lineinfile:
+        dest: '{{ pam_file_path }}'
+        insertafter: ^\s*session\s+.*pam_succeed_if\.so.*
+        line: session    {{ pam_module_control }}    pam_lastlog.so
+      register: result_pam_module_add
+      when:
+      - result_pam_line_other_control_present.found == 0 or result_pam_line_other_control_present.found
+        > 1
 
     - name: Ensure authselect changes are applied
       ansible.builtin.command:
         cmd: authselect apply-changes -b
-      when: 
-        - result_authselect_disable_feature_cmd is not skipped
-        - result_authselect_disable_Feature_cmd is success
- 
-- name: Configure pam_lastlog.so in appropriate PAM files
-  when: ("pam" in ansible_facts.packages and "kernel-core" in ansible_facts.packages)
-  block:
-    - name: Define the PAM file to be edited as a local fact
-      ansible.builtin.set_fact:
-        pam_file_path: /etc/pam.d/postlogin
+      when:
+      - result_authselect_present is defined
+      - result_authselect_present.stat.exists
+      - |-
+        (result_pam_module_add is defined and result_pam_module_add.changed)
+         or (result_pam_module_edit is defined and result_pam_module_edit.changed)
+    when:
+    - result_pam_line_present.found is defined
+    - result_pam_line_present.found == 0
 
-    - name: Check if system relies on authselect tool:
-      ansible.builtin.stat:
-        path: /usr/bin/authselect
-      register: result_authselect_present
+  - name: Define a fact for control already filtered in case filters are used
+    ansible.builtin.set_fact:
+      pam_module_control: '[default=1]'
 
-    - name: Do the following if using authselect
-      when: result_authselect_present.stat.exists
-      block:
-        - name: Check integrity of authselect current profile
-          ansible.builtin.command:
-            cmd: authselect check
-          register: result_authselect_check_cmd
-          changed_when: false
-          check_mode: false
-          failed_when: false
+  - name: Check if the required PAM module option is present in {{ pam_file_path }}
+    ansible.builtin.lineinfile:
+      path: '{{ pam_file_path }}'
+      regexp: ^\s*session\s+{{ pam_module_control | regex_escape() }}\s+pam_lastlog.so\s*.*\sshowfailed\b
+      state: absent
+    check_mode: true
+    changed_when: false
+    register: result_pam_module_display_login_attempts_option_present
 
-        - name: Informative message  based on authselect integrity check result
-          ansible.builtin.assert:
-            that:
-              - result_authselect_check_cmd.rc == 0
-            fail_msg:
-              - authselect integrity check failed. Remediation aborted!
-              - This remediation could not be applied because an authselect profile was not selected or the selected profile is not intact
-              - It is not recommended to manually edit the PAM files when authselect tool is available
-              - In cases where the default authselect profile does not cover a specific demand, a custom authselect profile is recommended.
-            success_msg:
-              - authselect integrity check passed
+  - name: Ensure the "showfailed" PAM option for "pam_lastlog.so" is included in {{ pam_file_path }}
+    ansible.builtin.lineinfile:
+      path: '{{ pam_file_path }}'
+      backrefs: true
+      regexp: ^(\s*session\s+{{ pam_module_control | regex_escape() }}\s+pam_lastlog.so.*)
+      line: \1 showfailed
+      state: present
+    register: result_pam_display_login_attempts_add
+    when:
+    - result_pam_module_display_login_attempts_option_present.found is defined
+    - result_pam_module_display_login_attempts_option_present.found == 0
 
-    - name: Ensure pam_lastlog.so is not configured with silent option
-      
+  - name: Define a fact for control already filtered in case filters are used
+    ansible.builtin.set_fact:
+      pam_module_control: '[default=1]'
+
+  - name: Check if {{ pam_file_path }} file is present
+    ansible.builtin.stat:
+      path: '{{ pam_file_path }}'
+    register: result_pam_file_present
+
+  - name: Ensure the "silent" option from "pam_lastlog.so" is not present in {{ pam_file_path }}
+    ansible.builtin.replace:
+      dest: '{{ pam_file_path }}'
+      regexp: (.*session.*{{ pam_module_control | regex_escape() }}.*pam_lastlog.so.*)\bsilent\b=?[0-9a-zA-Z]*(.*)
+      replace: \1\2
+    register: result_pam_option_removal
+    when: result_pam_file_present.stat.exists
+  when: "'pam' in ansible_facts.packages"
