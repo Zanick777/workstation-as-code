@@ -1,0 +1,14 @@
+---
+- name: Gather package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Set architecture for audit chmod tasks
+  ansible.builtin.set_fact:
+    audit_arch: b64
+  when:
+    - "'audit' in ansible_facts.packages"
+    - not ( ansible_architecture == "aarch64" )
+    - ansible_architecture in b64_architectures
+
+- name: 
