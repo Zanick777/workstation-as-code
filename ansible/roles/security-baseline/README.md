@@ -1,4 +1,4 @@
-# Security Baseline Fedora ![Feodra](https://img.shields.io) 43 machine
+# Security Baseline Fedora ![Fedora](https://img.shields.io/badge/LINUX-Fedora-blue?style=for-the-badge&logo=Fedora) 43 machine
 
 This role demonstrates at a principled applicaiton of the Center of Internet Security (CIS) Benchmarks toa  Fedora 43 workstation,
 translating control intent into pragmatic, risk-aware hardening decisions. Rather than blindly enforcing every recommendation, these roles

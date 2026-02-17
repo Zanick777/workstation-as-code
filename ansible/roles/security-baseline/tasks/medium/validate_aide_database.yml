@@ -1,0 +1,11 @@
+---
+- name: Check if AIDE DB is up and active
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/aide
+      - --check
+  register: check_aide_active
+
+- name: Debug var
+  ansible.builtin.debug:
+    var: check_aide_active
