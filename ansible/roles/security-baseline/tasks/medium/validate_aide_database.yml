@@ -1,11 +1,27 @@
 ---
-- name: Check if AIDE DB is up and active
-  ansible.builtin.command:
-    argv:
-      - /usr/sbin/aide
-      - --check
-  register: check_aide_active
+- name: Ensure AIDE package is installed
+  ansible.builtin.package:
+    name: aide
+    state: present
 
-- name: Debug var
-  ansible.builtin.debug:
-    var: check_aide_active
+- name: Check if AIDE db exists
+  ansible.builtin.stat:
+    path: /var/lib/aide/aide.db.gz
+  register: aide_db
+
+- name: Create and Copy AIDE DB
+  when: not aide_db.stat.exists
+  block:
+    - name: Initialize AIDE DB
+      ansible.builtin.command: /usr/sbin/aide --init
+      register: aide_init
+      changed_when: aide_init.rc == 0
+
+    - name: Copy new AIDE database into place
+      ansible.builtin.copy:
+        src: /var/lib/aide/aide.db.new.gz
+        dest: /var/lib/aide/aide.db.gz
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0600'
