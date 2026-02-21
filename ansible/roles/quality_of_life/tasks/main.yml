@@ -21,3 +21,12 @@
     dest: "/home/zanick/.bash_functions/"
     owner: "zanick"
     mode: '0644'
+
+- name: Ensure My directories are set up appropriately
+  ansible.builtin.include_tasks:
+    file: "{{ customization_file }}"
+  loop:
+    - ensure_my_user_account_in_wheel.yml
+  loop_control:
+    loop_var: "customization_file"
+    

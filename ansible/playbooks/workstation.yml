@@ -15,4 +15,4 @@
       ansible.builtin.import_role:
         name: ../roles/quality_of_life
       tags:
-        - QOF
+        - QOL

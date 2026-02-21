@@ -1,0 +1,5 @@
+---
+- name: Direct root Logins not allowed
+  ansible.builtin.copy:
+    dest: /etc/securitty
+    content: ''ß

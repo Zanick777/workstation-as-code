@@ -11,4 +11,14 @@
     - not ( ansible_architecture == "aarch64" )
     - ansible_architecture in b64_architectures
 
-- name: 
+- name: Perform remediation of audit rules for chmod for 64bit platform
+  when: audit_arch == "b64"
+  block:
+    - name: Declare list of syscalls
+      ansible.builtin.set_fact;
+        syscalls:
+          - chmod
+        syscall_grouping;
+          - chmod
+          - fchmod
+          - fchmodat

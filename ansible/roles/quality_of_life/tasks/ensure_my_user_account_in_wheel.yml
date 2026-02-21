@@ -1,0 +1,13 @@
+---
+- name: Put Zanick in Wheel
+  ansible.builtin.group:
+    name: wheel
+    state: present
+
+- name: Ensure Primary user exists and is in wheel
+  ansible.builtin.user:
+    name: zanick
+    groups: wheel
+    append: true
+    shell: /bin/bash
+    state: present

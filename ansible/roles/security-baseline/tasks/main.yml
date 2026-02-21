@@ -14,20 +14,23 @@
 #- name: Include High Severity Checks
 #  ansible.builtin.include_tasks: "high/{{ high_check_name }}"
 #  loop:
-#    - rpm_hash_validity.yml
 #    - configure_crypto_policy.yml
+#    - disable_ssh_empty_passwords.yml
 #    - display_login_attempts.yml
 #    - krb5_crypto_policy_link.yml
+#    - no_direct_root_logons.yml
 #    - no_empty_passwords.yml
-#    - disable_ssh_empty_passwords.yml
+#    - rpm_hash_validity.yml
 #  loop_control:
 #    loop_var: "high_check_name"
 
 - name: Include Medium Severity Checks
   ansible.builtin.include_tasks: "medium/{{ medium_check_name }}"
   loop:
-#    - validate_aide_database.yml
     - audit_rules_dac_modification_chmod.yml
+#    - set_max_password_age.yml
+#    - set_min_password_age.yml
+#    - validate_aide_database.yml
   loop_control:
     loop_var: "medium_check_name"
 ... 
